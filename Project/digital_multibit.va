@@ -1,0 +1,68 @@
+// VerilogA for Memory_Project, RRAM_Cell, veriloga
+`include "constants.vams"
+`include "disciplines.vams"
+
+module RRAM_Cell(TE, BE);
+
+inout TE, BE;
+electrical TE, BE;
+
+
+parameter real rl = 40;        //LRS
+parameter real rh = 13000;     //HRS
+parameter real vh = 1.5;        
+parameter real vl = -1.5;       
+
+
+parameter real alpha_p = 1e7;  
+parameter real alpha_n = 1e7;  
+parameter real init_w = 0.2;   
+
+parameter integer levels = 1024; 
+
+real raw_w;       
+real bounded_w;
+real quantized_w;   
+real G;           
+real dw_dt;       
+
+analog begin
+
+    @(initial_step) begin
+        raw_w = init_w;
+        dw_dt = 0.0;
+    end
+
+
+
+    if (V(TE, BE) > vh && raw_w < 1.0) begin
+        dw_dt = alpha_p * (V(TE, BE) - vh);
+    end
+    else if (V(TE, BE) < vl && raw_w > 0.0) begin
+        dw_dt = -alpha_n * (vl - V(TE, BE));
+    end
+    else begin
+        dw_dt = 0.0;
+    end
+
+
+    // Uses the simulator's time-steps to track the current filament position
+    raw_w = idt(dw_dt, init_w);
+
+  
+    // Prevents the filament from growing past physical limits
+    if (raw_w > 1.0) bounded_w = 1.0;
+    else if (raw_w < 0.0) bounded_w = 0.0;
+    else bounded_w = raw_w;
+
+  
+    quantized_w = floor(bounded_w * (levels - 1) + 0.5) / (levels - 1);
+
+   
+    G = quantized_w * (1.0/rl) + (1.0 - quantized_w) * (1.0/rh);
+
+    
+    I(TE, BE) <+ G * V(TE, BE);
+
+end
+endmodule
